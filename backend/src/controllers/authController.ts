@@ -18,11 +18,12 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Check if user already exists
+    // Check if user already exists (only active users)
     const { data: existing } = await supabase
       .from('users')
       .select('id')
       .eq('email', email)
+      .eq('active_flag', 'Y')
       .single();
 
     if (existing) {
@@ -74,11 +75,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Fetch user
+    // Fetch user (only active users can log in)
     const { data: user, error } = await supabase
       .from('users')
       .select('id, email, name, role, password, created_at')
       .eq('email', email)
+      .eq('active_flag', 'Y')
       .single();
 
     if (error || !user) {
@@ -122,11 +124,12 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
     // Verify refresh token
     const decoded = verifyToken(refreshToken);
 
-    // Fetch latest user data (in case role changed)
+    // Fetch latest user data (in case role changed; only active users)
     const { data: user } = await supabase
       .from('users')
       .select('id, email, name, role')
       .eq('id', decoded.userId)
+      .eq('active_flag', 'Y')
       .single();
 
     if (!user) {

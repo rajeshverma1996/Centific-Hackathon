@@ -17,6 +17,7 @@ export const list = async (req: Request, res: Response): Promise<void> => {
         id, agent_id, action, target_id, target_type, detail, created_at,
         agents!inner ( name )
       `)
+      .eq('active_flag', 'Y')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 

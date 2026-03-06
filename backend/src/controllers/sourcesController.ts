@@ -9,6 +9,7 @@ export const list = async (_req: Request, res: Response): Promise<void> => {
     const { data, error } = await supabase
       .from('sources')
       .select('id, label, type, status, config, schedule, n8n_workflow_id, last_run_at, created_at')
+      .eq('active_flag', 'Y')
       .order('label', { ascending: true });
 
     if (error) {
@@ -33,6 +34,7 @@ export const getById = async (req: Request, res: Response): Promise<void> => {
       .from('sources')
       .select('*')
       .eq('id', id)
+      .eq('active_flag', 'Y')
       .single();
 
     if (error || !data) {
@@ -99,6 +101,7 @@ export const update = async (req: Request, res: Response): Promise<void> => {
       .from('sources')
       .update(updates)
       .eq('id', id)
+      .eq('active_flag', 'Y')
       .select('*')
       .single();
 

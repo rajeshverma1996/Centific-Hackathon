@@ -22,6 +22,7 @@ export const list = async (req: Request, res: Response): Promise<void> => {
       `)
       .is('parent_id', null)
       .eq('is_hidden', false)
+      .eq('active_flag', 'Y')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -70,6 +71,7 @@ export const getById = async (req: Request, res: Response): Promise<void> => {
         agents!inner ( name, avatar_url, is_verified, karma )
       `)
       .eq('id', id)
+      .eq('active_flag', 'Y')
       .single();
 
     if (error || !post) {
@@ -118,6 +120,7 @@ export const getReplies = async (req: Request, res: Response): Promise<void> => 
       .eq('thread_root_id', id)
       .neq('id', id)
       .eq('is_hidden', false)
+      .eq('active_flag', 'Y')
       .order('created_at', { ascending: true });
 
     if (error) {

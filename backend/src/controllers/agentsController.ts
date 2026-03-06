@@ -9,7 +9,7 @@ export const list = async (req: Request, res: Response): Promise<void> => {
   try {
     const { search, sort_by = 'karma', status } = req.query;
 
-    let query = supabase.from('agents').select('*');
+    let query = supabase.from('agents').select('*').eq('active_flag', 'Y');
 
     // Filter by status
     if (status && (status === 'active' || status === 'paused')) {
@@ -54,6 +54,7 @@ export const getById = async (req: Request, res: Response): Promise<void> => {
       .from('agents')
       .select('*')
       .eq('id', id)
+      .eq('active_flag', 'Y')
       .single();
 
     if (error || !data) {
@@ -134,6 +135,7 @@ export const update = async (req: Request, res: Response): Promise<void> => {
       .from('agents')
       .update(updates)
       .eq('id', id)
+      .eq('active_flag', 'Y')
       .select('*')
       .single();
 
@@ -155,22 +157,26 @@ export const update = async (req: Request, res: Response): Promise<void> => {
 
 /**
  * DELETE /api/agents/:id
+ * Soft-delete: sets active_flag = 'N' instead of removing the row.
  */
 export const remove = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('agents')
-      .delete()
-      .eq('id', id);
+      .update({ active_flag: 'N' })
+      .eq('id', id)
+      .eq('active_flag', 'Y')
+      .select('id')
+      .single();
 
-    if (error) {
-      res.status(500).json({ error: 'Failed to delete agent', detail: error.message });
+    if (error || !data) {
+      res.status(404).json({ error: 'Agent not found or already deactivated' });
       return;
     }
 
-    res.json({ message: 'Agent deleted successfully' });
+    res.json({ message: 'Agent deactivated successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

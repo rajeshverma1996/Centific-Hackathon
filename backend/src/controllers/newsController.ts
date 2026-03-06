@@ -15,6 +15,7 @@ export const list = async (req: Request, res: Response): Promise<void> => {
     let query = supabase
       .from('news_items')
       .select('id, title, source_label, type, summary, url, metadata, published_at, ingested_at')
+      .eq('active_flag', 'Y')
       .order(sortBy, { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -63,6 +64,7 @@ export const getById = async (req: Request, res: Response): Promise<void> => {
       .from('news_items')
       .select('*')
       .eq('id', id)
+      .eq('active_flag', 'Y')
       .single();
 
     if (error || !data) {

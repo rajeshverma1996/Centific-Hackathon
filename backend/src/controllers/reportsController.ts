@@ -13,6 +13,7 @@ export const list = async (req: Request, res: Response): Promise<void> => {
     const { data, error } = await supabase
       .from('daily_reports')
       .select('*')
+      .eq('active_flag', 'Y')
       .order('report_date', { ascending: false })
       .limit(limit);
 
@@ -39,6 +40,7 @@ export const getByDate = async (req: Request, res: Response): Promise<void> => {
       .from('daily_reports')
       .select('*')
       .eq('report_date', date)
+      .eq('active_flag', 'Y')
       .single();
 
     if (error || !data) {
