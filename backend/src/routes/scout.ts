@@ -4,7 +4,7 @@ import { supabase } from '../config/supabase';
 
 const router = Router();
 
-const SCOUT_TYPES = ['arxiv', 'huggingface', 'custom_api', 'web_search'];
+const SCOUT_TYPES = ['arxiv', 'huggingface', 'custom_api', 'web_search', 'n8n'];
 
 /**
  * GET /api/scout/sources

@@ -27,7 +27,13 @@ const SOURCE_OPTIONS = [
   { value: "ArXiv", label: "ArXiv" },
   { value: "Hugging Face", label: "Hugging Face" },
   { value: "Web Search", label: "Web Search" },
-  { value: "Custom API (n8n)", label: "Custom API (n8n)" },
+  { value: "n8n Workflow", label: "n8n Workflow" },
+  { value: "Custom API", label: "Custom API" },
+];
+
+const N8N_HTTP_METHODS = [
+  { value: "GET", label: "GET" },
+  { value: "POST", label: "POST" },
 ];
 
 const SCHEDULES = [
@@ -115,6 +121,7 @@ function sourceOptionToType(sourceOption: string): string {
   if (sourceOption === "ArXiv") return "arxiv";
   if (sourceOption === "Hugging Face") return "huggingface";
   if (sourceOption === "Web Search") return "web_search";
+  if (sourceOption === "n8n Workflow") return "n8n";
   return "custom_api";
 }
 
@@ -122,6 +129,7 @@ function friendlyType(type: string): string {
   if (type === "web_search") return "Web Search";
   if (type === "arxiv") return "ArXiv";
   if (type === "huggingface") return "Hugging Face";
+  if (type === "n8n") return "n8n Workflow";
   if (type === "custom_api") return "Custom API";
   return type;
 }
@@ -182,6 +190,13 @@ const SourcesPage = () => {
   const [showHfToken, setShowHfToken] = useState(false);
   const [hfSortBy, setHfSortBy] = useState("likes");
   const [hfPipeline, setHfPipeline] = useState("text-generation");
+  // n8n-specific
+  const [n8nHost, setN8nHost] = useState("https://n8n-poc.centific.com");
+  const [n8nApiKey, setN8nApiKey] = useState("");
+  const [showN8nKey, setShowN8nKey] = useState(false);
+  const [n8nApiUrl, setN8nApiUrl] = useState("");
+  const [n8nHttpMethod, setN8nHttpMethod] = useState("GET");
+  const [n8nQueryParam, setN8nQueryParam] = useState("");
 
   // Detail / Log view state
   const [detailSource, setDetailSource] = useState<Source | null>(null);
@@ -218,6 +233,12 @@ const SourcesPage = () => {
     setShowHfToken(false);
     setHfSortBy("likes");
     setHfPipeline("text-generation");
+    setN8nHost("https://n8n-poc.centific.com");
+    setN8nApiKey("");
+    setShowN8nKey(false);
+    setN8nApiUrl("");
+    setN8nHttpMethod("GET");
+    setN8nQueryParam("");
   }, []);
 
   const openAdd = () => {
@@ -234,7 +255,8 @@ const SourcesPage = () => {
     if (t === "arxiv") setSourceType("ArXiv");
     else if (t === "huggingface") setSourceType("Hugging Face");
     else if (t === "web_search") setSourceType("Web Search");
-    else setSourceType("Custom API (n8n)");
+    else if (t === "n8n") setSourceType("n8n Workflow");
+    else setSourceType("Custom API");
 
     setLabel(source.label);
     setTopic((cfg.topic as string) || "");
@@ -254,6 +276,12 @@ const SourcesPage = () => {
     setShowHfToken(false);
     setHfSortBy((cfg.sort_by as string) || "likes");
     setHfPipeline((cfg.pipeline_filter as string) || "text-generation");
+    setN8nHost((cfg.n8n_host as string) || "https://n8n-poc.centific.com");
+    setN8nApiKey(""); // don't prefill for security
+    setShowN8nKey(false);
+    setN8nApiUrl((cfg.api_url as string) || "");
+    setN8nHttpMethod((cfg.http_method as string) || "GET");
+    setN8nQueryParam((cfg.query_param as string) || "");
     setStatus(source.status);
     setFormOpen(true);
   };
@@ -323,6 +351,13 @@ const SourcesPage = () => {
         config.sort_by = hfSortBy;
         config.pipeline_filter = hfPipeline === "all" ? "" : hfPipeline;
       }
+    }
+    if (sourceType === "n8n Workflow") {
+      config.n8n_host = n8nHost.trim();
+      if (n8nApiKey.trim()) config.n8n_api_key = n8nApiKey.trim();
+      if (n8nApiUrl.trim()) config.api_url = n8nApiUrl.trim();
+      if (n8nHttpMethod !== "GET") config.http_method = n8nHttpMethod;
+      if (n8nQueryParam.trim()) config.query_param = n8nQueryParam.trim();
     }
 
     const type = sourceOptionToType(sourceType);
@@ -414,6 +449,11 @@ const SourcesPage = () => {
                       <span className="source-badge source-badge-default">{friendlyType(source.type)}</span>
                       {source.type === "huggingface" && cfg.hf_type && (
                         <span className="source-badge source-badge-default">{String(cfg.hf_type)}</span>
+                      )}
+                      {source.type === "n8n" && cfg.api_url && (
+                        <span className="source-badge source-badge-default" title={String(cfg.api_url)}>
+                          {String(cfg.api_url).replace(/^https?:\/\//, '').split('/')[0]}
+                        </span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 text-[13px] text-muted-foreground flex-wrap">
@@ -838,6 +878,86 @@ const SourcesPage = () => {
                   </div>
                   <p className="text-[11px] text-muted-foreground">
                     Optional. Provides higher rate limits and access to gated models.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* n8n Workflow options */}
+            {sourceType === "n8n Workflow" && (
+              <div className="space-y-4 p-3.5 rounded-xl border border-border bg-secondary/30">
+                <div className="text-[12px] text-muted-foreground uppercase tracking-wider font-bold">
+                  n8n Workflow Settings
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="font-semibold">API URL</Label>
+                  <Input
+                    placeholder="https://api.example.com/v1/items"
+                    value={n8nApiUrl}
+                    onChange={(e) => setN8nApiUrl(e.target.value)}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Any REST API endpoint. The AI will probe it, analyze the response, and auto-create an n8n workflow.
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="w-28 space-y-1.5">
+                    <Label className="font-semibold">Method</Label>
+                    <Select value={n8nHttpMethod} onValueChange={setN8nHttpMethod}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {N8N_HTTP_METHODS.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <Label className="font-semibold">Query Param for Topic</Label>
+                    <Input
+                      placeholder="e.g. q, search, query (optional)"
+                      value={n8nQueryParam}
+                      onChange={(e) => setN8nQueryParam(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="font-semibold">n8n Instance URL</Label>
+                  <Input
+                    placeholder="https://n8n-poc.centific.com"
+                    value={n8nHost}
+                    onChange={(e) => setN8nHost(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="font-semibold">n8n API Key</Label>
+                  <div className="relative">
+                    <Input
+                      type={showN8nKey ? "text" : "password"}
+                      placeholder="eyJhbG..."
+                      value={n8nApiKey}
+                      onChange={(e) => setN8nApiKey(e.target.value)}
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowN8nKey(!showN8nKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      tabIndex={-1}
+                    >
+                      {showN8nKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/20">
+                  <p className="text-[11px] text-primary leading-relaxed">
+                    The AI will probe your API, analyze its response structure, auto-generate a tailored n8n workflow,
+                    create it in your n8n instance, activate it, and trigger it to fetch data.
                   </p>
                 </div>
               </div>

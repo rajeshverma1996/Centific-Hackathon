@@ -13,6 +13,7 @@ from scout.adapters.arxiv_adapter import ArxivAdapter
 from scout.adapters.hf_adapter import HuggingFaceAdapter
 from scout.adapters.custom_api_adapter import CustomApiAdapter
 from scout.adapters.web_search_adapter import WebSearchAdapter
+from scout.adapters.n8n_adapter import N8nAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ ADAPTER_MAP: dict[str, type[BaseAdapter]] = {
     "huggingface": HuggingFaceAdapter,
     "custom_api": CustomApiAdapter,
     "web_search": WebSearchAdapter,
+    "n8n": N8nAdapter,
 }
 
 FETCH_MULTIPLIER = 5
@@ -83,6 +85,7 @@ class ScoutService:
         source_type = source["type"]
         label = source.get("label", source_type)
         cfg: dict = source.get("config", {})
+        cfg.setdefault("label", label)
 
         topic = cfg.get("topic", "")
         limit = cfg.get("items_per_day", 5)

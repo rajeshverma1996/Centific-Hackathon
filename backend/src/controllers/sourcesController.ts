@@ -82,6 +82,50 @@ export const create = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // For n8n sources, trigger workflow creation in the AI engine immediately
+    if (type === 'n8n' && data) {
+      try {
+        const setupResp = await fetch(`${AI_ENGINE_URL}/api/n8n/setup`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Scout-Key': SCOUT_API_KEY,
+          },
+          body: JSON.stringify({
+            source_id: data.id,
+            label: data.label,
+            config: data.config,
+          }),
+        });
+
+        if (setupResp.ok) {
+          const setupResult: any = await setupResp.json();
+          // Store workflow ID and webhook path back in source config
+          await supabase
+            .from('sources')
+            .update({
+              n8n_workflow_id: setupResult.workflow_id,
+              config: {
+                ...data.config,
+                n8n_workflow_id: setupResult.workflow_id,
+                n8n_webhook_path: setupResult.webhook_path,
+              },
+            })
+            .eq('id', data.id);
+
+          (data as any).n8n_workflow_id = setupResult.workflow_id;
+          (data as any)._workflow_setup = {
+            node_count: setupResult.node_count,
+            node_types: setupResult.node_types,
+            generation_method: setupResult.generation_method,
+          };
+        }
+      } catch (setupErr: any) {
+        // Non-fatal: workflow will be created on first run if setup fails here
+        console.warn(`[sources] n8n workflow setup failed (will retry on run): ${setupErr.message}`);
+      }
+    }
+
     res.status(201).json({ data });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

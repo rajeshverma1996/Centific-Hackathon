@@ -156,6 +156,43 @@ def generate_report():
     return jsonify(result), status_code
 
 
+# ── n8n Workflow Setup ─────────────────────────────────────────────────────
+
+@app.route("/api/n8n/setup", methods=["POST"])
+@require_scout_key
+def setup_n8n_workflow_endpoint():
+    """Create an n8n workflow for a source on creation.
+
+    Body: { source_id, label, config: { api_url, n8n_host, n8n_api_key, ... } }
+    Returns: { workflow_id, webhook_path, node_count, node_types, ... }
+    """
+    from scout.adapters.n8n_adapter import setup_n8n_workflow
+
+    body = request.get_json(force=True)
+    source_id = body.get("source_id", "")
+    label = body.get("label", "n8n Scout")
+    cfg = body.get("config", {})
+    cfg.setdefault("label", label)
+
+    logger.info(
+        "POST /api/n8n/setup — source=%s label=%s api_url=%s",
+        source_id, label, cfg.get("api_url", "?"),
+    )
+
+    try:
+        result = setup_n8n_workflow(cfg)
+        result["source_id"] = source_id
+        logger.info(
+            "[n8n/setup] Success: workflow=%s nodes=%d method=%s",
+            result.get("workflow_id"), result.get("node_count", 0),
+            result.get("generation_method", "?"),
+        )
+        return jsonify(result)
+    except Exception as exc:
+        logger.exception("[n8n/setup] Failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
 # ── Start ────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
