@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="dome" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="eye" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#22d3ee"/>
+      <stop offset="100%" style="stop-color:#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <!-- Observatory dome -->
+  <path d="M4 14c0-6 6-10 12-10s12 4 12 10v2H4v-2z" fill="url(#dome)" stroke="#312e81" stroke-width="1"/>
+  <!-- Telescope / lens -->
+  <circle cx="16" cy="12" r="4" fill="url(#eye)" opacity="0.95"/>
+  <circle cx="16" cy="12" r="2" fill="#0f172a"/>
+  <!-- Neural / AI arcs -->
+  <path d="M8 20 Q16 16 24 20" stroke="#22d3ee" stroke-width="0.8" fill="none" opacity="0.8"/>
+  <path d="M10 24 Q16 20 22 24" stroke="#6366f1" stroke-width="0.6" fill="none" opacity="0.6"/>
+</svg>
