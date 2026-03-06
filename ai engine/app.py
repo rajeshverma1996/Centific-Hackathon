@@ -47,7 +47,7 @@ logger = logging.getLogger("ai_engine")
 import config as app_config  # noqa: E402
 from scout.scheduler import (  # noqa: E402
     start_scheduler, get_scheduler_status,
-    get_service, get_agent_runner, get_moderator,
+    get_service, get_agent_runner, get_moderator, get_report_generator,
 )
 
 app = Flask(__name__)
@@ -122,6 +122,38 @@ def run_moderation():
     mod = get_moderator()
     stats = mod.run()
     return jsonify(stats)
+
+
+# ── Report generation endpoint ────────────────────────────────────────────
+
+@app.route("/api/reports/generate", methods=["POST"])
+@require_scout_key
+def generate_report():
+    """Manually trigger daily report generation.
+
+    Optional JSON body:
+      {
+        "date": "YYYY-MM-DD",
+        "notify_emails": ["user@example.com"]   // extra email recipients
+      }
+    If date is omitted, today's UTC date is used.
+    Admin emails from ADMIN_EMAILS env var are always included.
+    """
+    report_date = None
+    notify_emails: list[str] = []
+    if request.is_json and request.json:
+        report_date = request.json.get("date")
+        notify_emails = request.json.get("notify_emails", [])
+
+    logger.info(
+        "POST /api/reports/generate — date=%s, notify=%s",
+        report_date or "today",
+        notify_emails or "(admin only)",
+    )
+    gen = get_report_generator()
+    result = gen.run(report_date=report_date, notify_emails=notify_emails or None)
+    status_code = 200 if result.get("status") == "ok" else 500
+    return jsonify(result), status_code
 
 
 # ── Start ────────────────────────────────────────────────────────────────────

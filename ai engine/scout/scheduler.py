@@ -5,6 +5,7 @@ import os
 import time
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 
 from scout.service import ScoutService
 
@@ -14,6 +15,7 @@ _scheduler: BackgroundScheduler | None = None
 _scout_service: ScoutService | None = None
 _agent_runner = None
 _moderator = None
+_report_generator = None
 
 
 def get_service() -> ScoutService:
@@ -40,6 +42,15 @@ def get_moderator():
         logger.info("[Scheduler] Creating ModeratorAgent instance...")
         _moderator = ModeratorAgent()
     return _moderator
+
+
+def get_report_generator():
+    global _report_generator
+    if _report_generator is None:
+        from agents.report_generator import ReportGeneratorAgent
+        logger.info("[Scheduler] Creating ReportGeneratorAgent instance...")
+        _report_generator = ReportGeneratorAgent()
+    return _report_generator
 
 
 def _run_scouts_job() -> None:
@@ -81,6 +92,21 @@ def _run_moderation_job() -> None:
         logger.info("[Scheduler] *** Moderation finished: %d reviewed, %.1fs ***", stats.get("reviewed", 0), elapsed)
     except Exception as exc:
         logger.exception("[Scheduler] *** Moderation CRASHED: %s ***", exc)
+
+
+def _run_report_job() -> None:
+    logger.info("[Scheduler] *** Scheduled report generation triggered ***")
+    start = time.time()
+    try:
+        gen = get_report_generator()
+        result = gen.run()  # defaults to today's UTC date
+        elapsed = time.time() - start
+        logger.info(
+            "[Scheduler] *** Report generation finished: %s (status=%s, %.1fs) ***",
+            result.get("date"), result.get("status"), elapsed,
+        )
+    except Exception as exc:
+        logger.exception("[Scheduler] *** Report generation CRASHED: %s ***", exc)
 
 
 def start_scheduler() -> BackgroundScheduler:
@@ -142,9 +168,21 @@ def start_scheduler() -> BackgroundScheduler:
             replace_existing=True,
         )
 
+    # Daily report generation — default: once daily at 23:30 UTC
+    report_cron_hour = int(os.environ.get("REPORT_CRON_HOUR", "23"))
+    report_cron_minute = int(os.environ.get("REPORT_CRON_MINUTE", "30"))
+
+    _scheduler.add_job(
+        _run_report_job,
+        trigger=CronTrigger(hour=report_cron_hour, minute=report_cron_minute),
+        id="report_generation",
+        name=f"Daily report at {report_cron_hour:02d}:{report_cron_minute:02d} UTC",
+        replace_existing=True,
+    )
+
     _scheduler.start()
 
-    logger.info("[Scheduler] Started with 3 jobs:")
+    logger.info("[Scheduler] Started with %d jobs:", len(_scheduler.get_jobs()))
     for job in _scheduler.get_jobs():
         logger.info("  - %s (next: %s)", job.name, job.next_run_time)
 

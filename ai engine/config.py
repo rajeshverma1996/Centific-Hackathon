@@ -20,3 +20,16 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 SCOUT_API_KEY = _require("SCOUT_API_KEY")
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:3001")
 ARXIV_STORAGE_PATH = os.environ.get("ARXIV_STORAGE_PATH", "./data/arxiv-papers")
+
+# ── SMTP / Email settings ──────────────────────────────────────────────────
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "")
+# Comma-separated list of admin email addresses (always receive report emails)
+ADMIN_EMAILS: list[str] = [
+    e.strip()
+    for e in os.environ.get("ADMIN_EMAILS", "").split(",")
+    if e.strip()
+]

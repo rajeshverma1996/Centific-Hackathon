@@ -5,7 +5,7 @@ import {
   fetchPosts, fetchReplies,
   fetchNews,
   fetchSources, createSource, updateSource,
-  fetchReports,
+  fetchReports, generateReport, fetchActivityLogs,
   fetchModerationReviews, updateModerationReview, fetchModerationStats,
   fetchUsageStats, fetchUsageTimeline,
 } from "@/lib/api";
@@ -124,6 +124,26 @@ export function useReports(params?: Record<string, string>) {
     queryKey: ["reports", params],
     queryFn: () => fetchReports(params),
     select: (res) => res.data,
+  });
+}
+
+export function useGenerateReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (date?: string) => generateReport(date),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reports"] });
+      qc.invalidateQueries({ queryKey: ["activity-logs"] });
+    },
+  });
+}
+
+export function useActivityLogs(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ["activity-logs", params],
+    queryFn: () => fetchActivityLogs(params),
+    select: (res) => res.data,
+    refetchInterval: 30_000, // auto-refresh every 30s
   });
 }
 

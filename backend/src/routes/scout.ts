@@ -567,4 +567,252 @@ router.post('/usage', scoutAuth, async (req: Request, res: Response): Promise<vo
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// DAILY REPORT ENDPOINTS (for ReportGeneratorAgent)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/scout/daily-report-data?date=YYYY-MM-DD
+ * Returns raw aggregated stats for a given date so the AI engine can
+ * feed them to the LLM for summarization.
+ */
+router.get('/daily-report-data', scoutAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+    const dayStart = `${dateStr}T00:00:00.000Z`;
+    const dayEnd = `${dateStr}T23:59:59.999Z`;
+
+    // 1. News ingested today
+    const { data: newsItems, error: newsErr } = await supabase
+      .from('news_items')
+      .select('id, title, source_label, type, summary')
+      .eq('active_flag', 'Y')
+      .gte('ingested_at', dayStart)
+      .lte('ingested_at', dayEnd)
+      .order('ingested_at', { ascending: false })
+      .limit(50);
+    if (newsErr) { res.status(500).json({ error: newsErr.message }); return; }
+
+    // 2. Posts created today
+    const { data: posts, error: postsErr } = await supabase
+      .from('posts')
+      .select('id, agent_id, body, upvote_count, downvote_count, parent_id, created_at, agents(name)')
+      .eq('active_flag', 'Y')
+      .gte('created_at', dayStart)
+      .lte('created_at', dayEnd)
+      .order('upvote_count', { ascending: false })
+      .limit(100);
+    if (postsErr) { res.status(500).json({ error: postsErr.message }); return; }
+
+    const mappedPosts = (posts || []).map((p: any) => ({
+      ...p,
+      agent_name: p.agents?.name || 'Unknown',
+      agents: undefined,
+    }));
+
+    // Top posts (highest upvote_count, top-level only)
+    const topPosts = mappedPosts
+      .filter((p: any) => !p.parent_id)
+      .slice(0, 5)
+      .map((p: any) => ({
+        id: p.id,
+        body: (p.body || '').slice(0, 200),
+        agent_name: p.agent_name,
+        upvote_count: p.upvote_count,
+        downvote_count: p.downvote_count,
+      }));
+
+    // 3. Agent karma leaderboard (top 10 agents by karma)
+    const { data: agents, error: agentsErr } = await supabase
+      .from('agents')
+      .select('id, name, karma, is_verified')
+      .eq('active_flag', 'Y')
+      .order('karma', { ascending: false })
+      .limit(10);
+    if (agentsErr) { res.status(500).json({ error: agentsErr.message }); return; }
+
+    // 4. Moderation stats for today
+    const { data: modReviews, error: modErr } = await supabase
+      .from('moderation_reviews')
+      .select('status')
+      .gte('created_at', dayStart)
+      .lte('created_at', dayEnd);
+
+    let moderationStats = { reviewed: 0, approved: 0, flagged: 0, rejected: 0 };
+    if (!modErr && modReviews) {
+      moderationStats.reviewed = modReviews.length;
+      for (const r of modReviews) {
+        const s = (r as any).status as string;
+        if (s === 'approved') moderationStats.approved++;
+        else if (s === 'flagged') moderationStats.flagged++;
+        else if (s === 'rejected') moderationStats.rejected++;
+      }
+    }
+
+    // 5. Agent activity counts for today
+    const { data: activityData } = await supabase
+      .from('agent_activity_log')
+      .select('action')
+      .gte('created_at', dayStart)
+      .lte('created_at', dayEnd);
+
+    let activityCounts = { posts: 0, replies: 0, votes: 0 };
+    if (activityData) {
+      for (const a of activityData) {
+        const act = (a as any).action as string;
+        if (act === 'post') activityCounts.posts++;
+        else if (act === 'reply') activityCounts.replies++;
+        else if (act === 'vote') activityCounts.votes++;
+      }
+    }
+
+    res.json({
+      data: {
+        date: dateStr,
+        news_count: (newsItems || []).length,
+        news_items: (newsItems || []).map((n: any) => ({
+          title: n.title,
+          source_label: n.source_label,
+          type: n.type,
+          summary: (n.summary || '').slice(0, 200),
+        })),
+        post_count: mappedPosts.filter((p: any) => !p.parent_id).length,
+        reply_count: mappedPosts.filter((p: any) => !!p.parent_id).length,
+        top_posts: topPosts,
+        karma_leaderboard: (agents || []).map((a: any) => ({
+          agent_name: a.name,
+          karma: a.karma,
+          is_verified: a.is_verified,
+        })),
+        moderation_stats: moderationStats,
+        activity_counts: activityCounts,
+      },
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+/**
+ * POST /api/scout/daily-report
+ * Upsert an AI-generated daily report.
+ * Body: { report_date, headline, summary, news_count, post_count,
+ *         agent_findings_count, top_posts, karma_leaderboard, moderation_stats }
+ */
+router.post('/daily-report', scoutAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      report_date, headline, summary, news_count, post_count,
+      agent_findings_count, top_posts, karma_leaderboard, moderation_stats,
+    } = req.body;
+
+    if (!report_date) {
+      res.status(400).json({ error: 'report_date is required (YYYY-MM-DD)' });
+      return;
+    }
+
+    const row: any = {
+      report_date,
+      headline: headline || null,
+      summary: summary || null,
+      news_count: news_count ?? 0,
+      post_count: post_count ?? 0,
+      agent_findings_count: agent_findings_count ?? 0,
+      top_posts: top_posts || [],
+      karma_leaderboard: karma_leaderboard || [],
+      moderation_stats: moderation_stats || {},
+      active_flag: 'Y',
+    };
+
+    // Upsert on report_date (unique)
+    const { data, error } = await supabase
+      .from('daily_reports')
+      .upsert(row, { onConflict: 'report_date' })
+      .select('id, report_date, headline, summary, news_count, post_count')
+      .single();
+
+    if (error) {
+      res.status(500).json({ error: 'Failed to upsert report', detail: error.message });
+      return;
+    }
+
+    // Audit log
+    await supabase.from('agent_activity_log').insert({
+      agent_id: null,
+      action: 'generate_report',
+      target_type: 'daily_report',
+      detail: { report_date, headline },
+    });
+
+    res.status(201).json({ data });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SYSTEM ACTIVITY LOGS (for AI engine to record events)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/scout/system-log
+ * AI engine writes a log entry after report generation, email send, etc.
+ * Body: { event_type, status, summary?, details? }
+ */
+router.post('/system-log', scoutAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { event_type, status, summary, details } = req.body;
+
+    if (!event_type || !status) {
+      res.status(400).json({ error: 'event_type and status are required' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('system_activity_logs')
+      .insert({
+        event_type,
+        status,
+        summary: summary || null,
+        details: details || {},
+      })
+      .select('id, event_type, status, summary, created_at')
+      .single();
+
+    if (error) {
+      res.status(500).json({ error: 'Failed to insert log', detail: error.message });
+      return;
+    }
+
+    res.status(201).json({ data });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+/**
+ * GET /api/scout/system-logs
+ * Read recent system activity logs.
+ * Query: limit (default 50), event_type (optional filter)
+ */
+router.get('/system-logs', scoutAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const eventType = req.query.event_type as string | undefined;
+
+    let query = supabase
+      .from('system_activity_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (eventType) {
+      query = query.eq('event_type', eventType);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      res.status(500).json({ error: 'Failed to fetch logs', detail: error.message });
+      return;
+    }
+
+    res.json({ data: data || [] });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 export default router;

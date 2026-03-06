@@ -58,7 +58,7 @@ class AgentBrain:
 
         return provider, model, key
 
-    def _call_llm(self, system: str, user: str, agent: dict, service: str = "agent") -> str | None:
+    def _call_llm(self, system: str, user: str, agent: dict, service: str = "agent", max_tokens: int = 1024) -> str | None:
         provider, model, key = self._get_llm_config(agent)
         if not key:
             logger.error("[Brain] No API key available for agent %s", agent.get("name"))
@@ -69,9 +69,9 @@ class AgentBrain:
         try:
             start = time.time()
             if provider == "openai":
-                text = self._call_openai(system, user, model, key, service=service, agent_name=name)
+                text = self._call_openai(system, user, model, key, service=service, agent_name=name, max_tokens=max_tokens)
             else:
-                text = self._call_claude(system, user, model, key, service=service, agent_name=name)
+                text = self._call_claude(system, user, model, key, service=service, agent_name=name, max_tokens=max_tokens)
             elapsed = time.time() - start
             logger.info("[Brain] [%s] LLM responded in %.1fs (%s/%s)", name, elapsed, provider, model)
             return text
@@ -79,11 +79,11 @@ class AgentBrain:
             logger.exception("[Brain] [%s] LLM call failed: %s", name, exc)
             return None
 
-    def _call_claude(self, system: str, user: str, model: str, key: str, service: str = "agent", agent_name: str | None = None) -> str:
+    def _call_claude(self, system: str, user: str, model: str, key: str, service: str = "agent", agent_name: str | None = None, max_tokens: int = 1024) -> str:
         client = anthropic.Anthropic(api_key=key)
         resp = client.messages.create(
             model=model,
-            max_tokens=1024,
+            max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
@@ -93,7 +93,7 @@ class AgentBrain:
             tracker.record(service=service, model=model, input_tokens=in_tok, output_tokens=out_tok, agent_name=agent_name)
         return resp.content[0].text.strip()
 
-    def _call_openai(self, system: str, user: str, model: str, key: str, service: str = "agent", agent_name: str | None = None) -> str:
+    def _call_openai(self, system: str, user: str, model: str, key: str, service: str = "agent", agent_name: str | None = None, max_tokens: int = 1024) -> str:
         client = openai.OpenAI(api_key=key)
         uses_new = any(model.startswith(p) for p in _NEW_PARAM_MODELS)
         is_reasoning = model.startswith("o1") or model.startswith("o3") or model.startswith("o4") or "thinking" in model
@@ -106,9 +106,9 @@ class AgentBrain:
             ],
         }
         if uses_new:
-            params["max_completion_tokens"] = 1024
+            params["max_completion_tokens"] = max_tokens
         else:
-            params["max_tokens"] = 1024
+            params["max_tokens"] = max_tokens
 
         resp = client.chat.completions.create(**params)
         usage = resp.usage

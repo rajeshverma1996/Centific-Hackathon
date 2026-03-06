@@ -209,6 +209,17 @@ export const fetchReports = (params?: Record<string, string>) => {
   return apiFetch<{ data: any[] }>(`/api/reports${qs}`);
 };
 
+export const generateReport = (date?: string) =>
+  apiFetch<any>('/api/reports/generate', {
+    method: 'POST',
+    body: JSON.stringify(date ? { date } : {}),
+  });
+
+export const fetchActivityLogs = (params?: Record<string, string>) => {
+  const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+  return apiFetch<{ data: any[] }>(`/api/reports/logs${qs}`);
+};
+
 // ── Moderation ──────────────────────────────────────────────────────────
 
 export const fetchModerationReviews = (params?: Record<string, string>) => {

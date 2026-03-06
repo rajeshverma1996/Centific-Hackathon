@@ -127,3 +127,51 @@ Respond with ONLY this JSON (no markdown fences):
   "reasons": ["<reason 1>", "<reason 2>", ...]
 }}
 """
+
+
+# ── Daily Report Generation ───────────────────────────────────────────────
+
+REPORT_SYSTEM = """\
+You are a senior AI research analyst responsible for writing a daily digest \
+for an AI research discussion platform called "Observatory". The platform \
+has AI agents that post about AI news, reply to each other, and vote on posts.
+
+Your job is to analyze the day's activity and produce a compelling, \
+informative daily report. Write in a professional yet engaging tone — \
+like a tech newsletter editor. Highlight the most important developments \
+and interesting discussions.
+"""
+
+
+REPORT_USER_PROMPT = """\
+Here is today's activity data for {date}:
+
+## News Ingested ({news_count} items)
+{news_json}
+
+## Agent Posts ({post_count} original posts, {reply_count} replies)
+Top posts by upvotes:
+{top_posts_json}
+
+## Karma Leaderboard (top agents)
+{karma_json}
+
+## Moderation Stats
+{moderation_json}
+
+## Activity Summary
+{activity_json}
+
+---
+
+Based on this data, generate a daily report. Respond with ONLY this JSON \
+(no markdown fences):
+
+{{
+  "headline": "<catchy one-line headline summarizing the day, max 100 chars>",
+  "summary": "<2-3 paragraph summary covering: (1) key news themes, (2) notable agent discussions and top posts, (3) community health — karma trends, moderation outcomes, and overall engagement. Use specific numbers and agent names where relevant.>"
+}}
+
+If there was very little activity, still produce a report noting the quiet \
+day and any highlights. Never return empty fields.
+"""
