@@ -57,6 +57,32 @@ const ARXIV_CATEGORIES = [
   "cs.RO", "stat.ML", "cs.MA", "cs.IR", "cs.SE",
 ];
 
+const HF_MODES = [
+  { value: "model", label: "Models", desc: "Search models by topic" },
+  { value: "dataset", label: "Datasets", desc: "Search datasets by topic" },
+  { value: "benchmark", label: "Benchmark Leaderboard", desc: "Top models ranked by likes/downloads with table" },
+  { value: "daily_paper", label: "Daily Papers", desc: "Latest research papers from HuggingFace" },
+  { value: "space", label: "Spaces", desc: "Top/trending HuggingFace Spaces" },
+];
+
+const HF_SORT_OPTIONS = [
+  { value: "likes", label: "Likes" },
+  { value: "downloads", label: "Downloads" },
+  { value: "lastModified", label: "Last Modified" },
+];
+
+const HF_PIPELINE_OPTIONS = [
+  { value: "all", label: "All pipelines" },
+  { value: "text-generation", label: "Text Generation" },
+  { value: "text-to-image", label: "Text to Image" },
+  { value: "image-classification", label: "Image Classification" },
+  { value: "text-classification", label: "Text Classification" },
+  { value: "automatic-speech-recognition", label: "Speech Recognition" },
+  { value: "translation", label: "Translation" },
+  { value: "question-answering", label: "Question Answering" },
+  { value: "summarization", label: "Summarization" },
+];
+
 type ModelProvider = "openai" | "anthropic";
 
 interface ModelOption {
@@ -150,6 +176,12 @@ const SourcesPage = () => {
   const [showTavilyKey, setShowTavilyKey] = useState(false);
   const [searchDepth, setSearchDepth] = useState<"basic" | "advanced">("advanced");
   const [searchFocus, setSearchFocus] = useState<"news" | "general">("news");
+  // HuggingFace-specific
+  const [hfMode, setHfMode] = useState("model");
+  const [hfToken, setHfToken] = useState("");
+  const [showHfToken, setShowHfToken] = useState(false);
+  const [hfSortBy, setHfSortBy] = useState("likes");
+  const [hfPipeline, setHfPipeline] = useState("text-generation");
 
   // Detail / Log view state
   const [detailSource, setDetailSource] = useState<Source | null>(null);
@@ -181,6 +213,11 @@ const SourcesPage = () => {
     setShowTavilyKey(false);
     setSearchDepth("advanced");
     setSearchFocus("news");
+    setHfMode("model");
+    setHfToken("");
+    setShowHfToken(false);
+    setHfSortBy("likes");
+    setHfPipeline("text-generation");
   }, []);
 
   const openAdd = () => {
@@ -212,6 +249,11 @@ const SourcesPage = () => {
     setShowTavilyKey(false);
     setSearchDepth((cfg.search_depth as "basic" | "advanced") || "advanced");
     setSearchFocus((cfg.search_focus as "news" | "general") || "news");
+    setHfMode((cfg.hf_type as string) || "model");
+    setHfToken(""); // don't prefill token for security
+    setShowHfToken(false);
+    setHfSortBy((cfg.sort_by as string) || "likes");
+    setHfPipeline((cfg.pipeline_filter as string) || "text-generation");
     setStatus(source.status);
     setFormOpen(true);
   };
@@ -273,6 +315,14 @@ const SourcesPage = () => {
       config.search_depth = searchDepth;
       config.search_focus = searchFocus;
       if (tavilyApiKey.trim()) config.tavily_api_key = tavilyApiKey.trim();
+    }
+    if (sourceType === "Hugging Face") {
+      config.hf_type = hfMode;
+      if (hfToken.trim()) config.hf_token = hfToken.trim();
+      if (hfMode === "benchmark") {
+        config.sort_by = hfSortBy;
+        config.pipeline_filter = hfPipeline === "all" ? "" : hfPipeline;
+      }
     }
 
     const type = sourceOptionToType(sourceType);
@@ -362,6 +412,9 @@ const SourcesPage = () => {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-[15px] text-foreground">{source.label}</span>
                       <span className="source-badge source-badge-default">{friendlyType(source.type)}</span>
+                      {source.type === "huggingface" && cfg.hf_type && (
+                        <span className="source-badge source-badge-default">{String(cfg.hf_type)}</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 text-[13px] text-muted-foreground flex-wrap">
                       <span className={source.status === "active" ? "text-upvote" : ""}>
@@ -696,6 +749,96 @@ const SourcesPage = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* HuggingFace options */}
+            {sourceType === "Hugging Face" && (
+              <div className="space-y-4 p-3.5 rounded-xl border border-border bg-secondary/30">
+                <div className="text-[12px] text-muted-foreground uppercase tracking-wider font-bold">
+                  HuggingFace Settings
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="font-semibold">Mode</Label>
+                  <div className="space-y-1.5">
+                    {HF_MODES.map((mode) => (
+                      <button
+                        key={mode.value}
+                        type="button"
+                        onClick={() => setHfMode(mode.value)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
+                          hfMode === mode.value
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-foreground/20"
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <span className="font-bold text-[13px] text-foreground">{mode.label}</span>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">{mode.desc}</p>
+                        </div>
+                        <div className="shrink-0">
+                          <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${
+                            hfMode === mode.value ? "border-primary" : "border-muted-foreground/40"
+                          }`}>
+                            {hfMode === mode.value && <div className="h-2 w-2 rounded-full bg-primary" />}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {hfMode === "benchmark" && (
+                  <div className="flex gap-3">
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="font-semibold">Sort by</Label>
+                      <Select value={hfSortBy} onValueChange={setHfSortBy}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {HF_SORT_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="font-semibold">Pipeline</Label>
+                      <Select value={hfPipeline} onValueChange={setHfPipeline}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {HF_PIPELINE_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label className="font-semibold">HuggingFace API Token</Label>
+                  <div className="relative">
+                    <Input
+                      type={showHfToken ? "text" : "password"}
+                      placeholder="hf_..."
+                      value={hfToken}
+                      onChange={(e) => setHfToken(e.target.value)}
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowHfToken(!showHfToken)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      tabIndex={-1}
+                    >
+                      {showHfToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Optional. Provides higher rate limits and access to gated models.
+                  </p>
                 </div>
               </div>
             )}
